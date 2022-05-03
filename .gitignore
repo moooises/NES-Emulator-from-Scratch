@@ -254,5 +254,6 @@ paket-files/
 *.sln.iml
 
 #Visual Studio que encontre
-*.vcxproj.*
 *.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
