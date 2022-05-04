@@ -71,6 +71,92 @@ void olc6502::clock()
 	cycles--; //After one cycle, we decrement the cycle count
 }
 
+void olc6502::reset()
+{
+	a = 0; // Accumulator Register
+	x = 0; // X Register
+	y = 0; // Y Register
+	stkp = 0xFD; // Stack Pointer (points to location on bus) // Where the stack begins
+	status = 0x00 | U; // Status Register // the status register is cleared except for unused
+	
+	// 0xFFFC is a hard-coded address, which contains a second address that the program counter is set to.  
+	// This allows the programmer to jump to a known and programmable location in the
+	// memory to start executing from. Typically the programmer would set the value
+	// at location 0xFFFC at compile time.
+	addr_abs = 0xFFFC;
+	uint16_t lo = read(addr_abs + 0);
+	uint16_t hi = read(addr_abs + 1);
+
+	pc = (hi << 8) | lo;
+
+	pc = 0x ; // Program Counter
+}
+
+// Interrupt requests are a complex operation and only happen if the
+// "disable interrupt" flag is 0. IRQs can happen at any time, but
+// you dont want them to be destructive to the operation of the running 
+// program. Therefore the current instruction is allowed to finish
+// (which I facilitate by doing the whole thing when cycles == 0) and 
+// then the current program counter is stored on the stack. Then the
+// current status register is stored on the stack.
+// 
+//  When the routine that services the interrupt has finished, the status register
+// and program counter can be restored to how they where before it 
+// occurred. This is impemented by the "RTI" instruction. Once the IRQ
+// has happened, in a similar way to a reset, a programmable address
+// is read form hard coded location 0xFFFE, which is subsequently
+// set to the program counter.
+void olc6502::irq()
+{
+	if (GetFlag(I) == 0)
+	{	
+		//When an interruption occur, it saves data in the stack
+		//First is stack the program counter, two times because it is 16-bits
+		write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+		stkp--;
+		write(0x0100 + stkp, pc & 0x00FF);
+		stkp--;
+
+		//Save the status register too
+		SetFlag(B, 0);
+		SetFlag(U, 1);
+		SetFlag(I, 1);
+		write(0x0100 + stkp, status);
+		stkp--;
+
+		addr_abs = 0xFFFE;
+		uint16_t lo = read(addr_abs + 0);
+		uint16_t hi = read(addr_abs + 1);
+		pc = (hi << 8) | lo;
+
+		cycles = 7;
+	}
+}
+
+// The same as irq, but there is nothing to stop it
+// In irq was the I flag.
+void olc6502::nmi()
+{
+	write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+	stkp--;
+	write(0x0100 + stkp, pc & 0x00FF);
+	stkp--;
+
+	SetFlag(B, 0);
+	SetFlag(U, 1);
+	SetFlag(I, 1);
+	write(0x0100 + stkp, status);
+	stkp--;
+
+	//Another absolute address for this instruction
+	addr_abs = 0xFFFA;
+	uint16_t lo = read(addr_abs + 0);
+	uint16_t hi = read(addr_abs + 1);
+	pc = (hi << 8) | lo;
+
+	cycles = 8;
+}
+
 // Returns the value of a specific bit of the status register
 uint8_t olc6502::GetFlag(FLAGS6502 f)
 {
@@ -482,14 +568,85 @@ uint8_t olc6502::CLV()
 	return 0;
 }
 
-//42:31
+//42:31-50:39
+//The biggest problem here is set the V flag (overflow).
+//6502 CPU use a signed 2's complement, the most significant bit set the value to negative and the rest of the bits are added
+//Ex: 10000000= -128; 10010101= -107
 uint8_t olc6502::ADC()
 {
-
+	fetch();
+	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)GetFlag(C);
+	SetFlag(C, temp > 255); // If the value is bigger than 255, the high bit is 0 
+	SetFlag(Z, (temp $ 0x00FF) == 0); // If the result is 0
+	SetFlag(N, temp & 0x80); // If the result is negative , 0x80 is 10000000 = -128 
+	// Look a the table, signs from A=a and M = fetched and R = A + M, ^= Exclusive OR 
+	// V = ~(A^M) & (A^R) 
+	SetFlag(V, (~((uint16_t)a ^ (uint16_t)fetched) & ((uint16_t)a ^ (uint16_t)temp)) & 0x0080);
+	a = temp & 0x00FF;
+	return 1; //Extra clock cycle
 }
 
-
+// To make a signed positive number negative, we can invert the bits and add 1
+// (OK, I lied, a little bit of 1 and 2s complement :P)
+//
+//  5 = 00000101
+// -5 = 11111010 + 00000001 = 11111011 (or 251 in our 0 to 255 range)
+//Kind of the same as ADC
 uint8_t olc6502::SBC()
 {
+	fetch();
 
+	uint16_t value = ((uint16_t)fetched) ^ 0x00FF; //Exclusive OR
+
+	uint16_t temp = (uint16_t)a + value + (uint16_t)GetFlag(C);
+	SetFlag(C, temp & 0xFF00);
+	SetFlag(Z, ((temp & 0x00FF) == 0);
+	SetFlag(V, (temp ^ (uint16_t)a) & (temp ^ value) & 0x0080);
+	SetFlag(N, temp & 0x0000);
+	a = temp & 0x00FF;
+	return 1;
 }
+
+// Instruction: Push Accumulator to Stack
+// Function:    A -> stack
+// ESTO ES LA PILA, PUSH EN LA PILA
+uint8_t olc6502::PHA()
+{
+	write(0x0100 + stkp, a);
+	stkp--; // A spot has been occupied, so we decrement the stack pointer
+	return 0;
+}
+
+// Instruction: Pop Accumulator off Stack
+// Function:    A <- stack
+// Flags Out:   N, Z
+// The opposite to the previous one
+uint8_t olc6502::PLA()
+{
+	stkp++;
+	a = read(0x0100 + stkp);
+	SetFlag(Z, a == 0x00);
+	SetFlag(N, a & 0x80);
+	return 0;
+}
+
+// When the routine that services the interrupt has finished, the status register
+// and program counter can be restored to how they where before it 
+// occurred. This is impemented by the "RTI" instruction. Once the IRQ
+// has happened, in a similar way to a reset, a programmable address
+// is read form hard coded location 0xFFFE, which is subsequently
+// set to the program counter.
+uint8_t olc6502::RTI()
+{
+	stkp++;
+	status = read(0x0100 + stkp);
+	status &= ~B;
+	status &= ~U;
+
+	stkp++;
+	pc = (uint16_t)read(0x0100 + stkp);
+	stkp++;
+	pc |= (uint16_t)read(0x0100 + stkp) << 8;
+	return 0;
+}
+//57:00
