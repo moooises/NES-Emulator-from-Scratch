@@ -7,7 +7,7 @@ Bus::Bus()
 
 	//Connect CPU to communication BUS
 	cpu.ConnectBus(this);
-	//21:27 part #2
+	
 }
 
 Bus::~Bus()
