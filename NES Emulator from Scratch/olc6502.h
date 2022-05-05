@@ -1,5 +1,14 @@
 #pragma once
 
+// Ths is required for translation table and disassembler. The table
+// could be implemented straight up as an array, but I used a vector.
+#include <vector>
+
+// These are required for disassembler. If you dont require disassembly
+// then just remove the function.
+#include <string>
+#include <map>
+
 class Bus;
 
 class olc6502 //archive.6502.org/datasheets/rockwell_r650x_r651x.pdf
@@ -29,7 +38,11 @@ public:
 	uint16_t pc = 0x0000; // Program Counter
 	uint8_t status = 0x00; // Status Register
 
+	bool complete();
+
 	void ConnectBus(Bus* n) { bus = n; }
+
+	std::map<uint16_t, std::string> disassemble(uint16_t nStart, uint16_t nStop);
 
 	// Addressing Modes
 
