@@ -20,6 +20,7 @@ public:
 		V = (1 << 6), // Overflow
 		N = (1 << 7), // Negative
 	};
+	//  N V U B D I Z C -> Status
 
 	uint8_t a = 0x00; // Accumulator Register
 	uint8_t x = 0x00; // X Register
@@ -65,7 +66,7 @@ public:
 	uint8_t fetch(); //Fetch data from a source
 	uint8_t fetched = 0x00; // Where we save de fetched data
 
-	uint16_t addr_abs = 0x0000; // To store location of a memory
+	uint16_t addr_abs = 0x0000; // To store location of a memory // La dirección que recibe los
 	uint16_t addr_rel = 0x00; // To save relative address, on 6502 branch intrucctions only jumps 
 							  // certain distance from the location the where call
 							  // they jump to a relative address, so we store it
