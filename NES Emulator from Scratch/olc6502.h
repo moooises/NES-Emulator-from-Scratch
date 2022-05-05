@@ -83,8 +83,12 @@ public:
 	uint16_t addr_rel = 0x00; // To save relative address, on 6502 branch intrucctions only jumps 
 							  // certain distance from the location the where call
 							  // they jump to a relative address, so we store it
+	uint16_t temp = 0x0000;
+
+
 	uint8_t opcode = 0x00; // To store the opcode
 	uint8_t cycles = 0; // Number of cycles left for the current intruction
+
 
 private:
 	Bus* bus = nullptr;

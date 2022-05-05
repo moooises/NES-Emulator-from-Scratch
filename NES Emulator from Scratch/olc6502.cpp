@@ -329,7 +329,7 @@ uint8_t olc6502::IND()
 // a location in page 0x00 (the high 8-bits of 16-bit adress). The actual 16-bit address is read 
 // from this location
 // SE APLICA EL OFFSET A LA DIRECCIÓN DE 8-BITS, ANTES DE ACCEDER AL CONTENIDO DE LA DIRECCIÓN
-uint16_t olc6502::IZX()
+uint8_t olc6502::IZX()
 {
 	uint16_t t = read(pc);
 	pc++;
@@ -348,7 +348,7 @@ uint16_t olc6502::IZX()
 // Y Register is added to it to offset it. If the offset causes a
 // change in page then an additional clock cycle is required.
 // SE APLICA EL OFFSET A LA DIRECCION DE 16-BITS YA FORMADA
-uint16_t olc6502::IZY()
+uint8_t olc6502::IZY()
 {
 	uint16_t t = read(pc);
 	pc++;
@@ -374,7 +374,7 @@ uint8_t olc6502::REL()
 {
 	addr_rel = read(pc);
 	pc++;
-	if (addr_rel $ 0x80)// 0x80 is used to check if addr_rel is signed (-/+)
+	if (addr_rel & 0x80)// 0x80 is used to check if addr_rel is signed (-/+)
 		addr_rel |= 0xFF00;// The high order bits are set to all 1, to assure the binary arithmetics works when adding 
 						   // the relative address
 	return 0;
@@ -386,7 +386,7 @@ uint8_t olc6502::REL()
 
 uint8_t olc6502::fetch()
 {
-	if (!(lookup[opcode].addrmode == $olc6502::IMP))// In IMP there is nothing to fetch
+	if (!(lookup[opcode].addrmode == &olc6502::IMP))// In IMP there is nothing to fetch
 		fetched = read(addr_abs);
 	return fetched;
 }
@@ -400,7 +400,7 @@ uint8_t olc6502::ADC()
 	fetch();
 	uint16_t temp = (uint16_t)a + (uint16_t)fetched + (uint16_t)GetFlag(C);
 	SetFlag(C, temp > 255); // If the value is bigger than 255, the high bit is 0 
-	SetFlag(Z, (temp $ 0x00FF) == 0); // If the result is 0
+	SetFlag(Z, (temp & 0x00FF) == 0); // If the result is 0
 	SetFlag(N, temp & 0x80); // If the result is negative , 0x80 is 10000000 = -128 
 	// Look a the table, signs from A=a and M = fetched and R = A + M, ^= Exclusive OR 
 	// V = ~(A^M) & (A^R) 
@@ -423,7 +423,7 @@ uint8_t olc6502::SBC()
 
 	uint16_t temp = (uint16_t)a + value + (uint16_t)GetFlag(C);
 	SetFlag(C, temp & 0xFF00);
-	SetFlag(Z, ((temp & 0x00FF) == 0);
+	SetFlag(Z, (temp & 0x00FF) == 0);
 	SetFlag(V, (temp ^ (uint16_t)a) & (temp ^ value) & 0x0080);
 	SetFlag(N, temp & 0x0000);
 	a = temp & 0x00FF;
@@ -466,7 +466,7 @@ uint8_t olc6502::ASL()
 
 // Instruction: Branch if Carry Clear
 // Function:    if(C == 0) pc = address 
-uint8 olc6502::BCC()
+uint8_t olc6502::BCC()
 {
 	if (GetFlag(C) == 0)
 	{
@@ -529,7 +529,7 @@ uint8_t olc6502::BIT()
 	temp = a & fetched;
 
 	SetFlag(Z, (temp & 0xFF) == 0x00);
-	SetFlag(N, fetched & (1 << 7);
+	SetFlag(N, fetched & (1 << 7));
 	SetFlag(V, fetched & (1 << 6));
 
 	return 0;
@@ -783,7 +783,7 @@ uint8_t olc6502::INC()
 	temp = fetched + 1; // Es una atributo de la clase, no puede hacer fetched++
 	write(addr_abs, temp & 0x00FF);
 	SetFlag(N, temp & 0x0080);
-	SetFlag(Z, temp & 0x00FF) == 0x000);
+	SetFlag(Z, (temp & 0x00FF) == 0x000);
 	
 	return 0;
 }
