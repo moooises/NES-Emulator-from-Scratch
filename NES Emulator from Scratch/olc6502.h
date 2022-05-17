@@ -109,5 +109,9 @@ private:
 
 	std::vector<INSTRUCTION> lookup; // the vector of all instructions
 
+#ifdef LOGMODE
+private:
+	FILE* logfile = nullptr;
+#endif
 };
 

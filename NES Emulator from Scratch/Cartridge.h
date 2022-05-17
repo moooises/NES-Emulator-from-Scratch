@@ -12,7 +12,22 @@ public:
 	Cartridge(const std::string& sFileName); // path to the file/Rom/.Nes
 	~Cartridge();
 
+
+public: // From Github
+	bool ImageValid();
+
+	enum MIRROR
+	{
+		HORIZONTAL,
+		VERTICAL,
+		ONESCREEN_LO,
+		ONESCREEN_HI,
+	} mirror = HORIZONTAL;
+
 private:
+
+	bool bImageValid = false; // From Github
+
 	std::vector<uint8_t> vPRGMemory; // The program of the cartridge
 	std::vector<uint8_t> vCHRMemory; // The Patter/Assets of the cartridge
 

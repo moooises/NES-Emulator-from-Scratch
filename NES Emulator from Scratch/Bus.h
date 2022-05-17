@@ -19,7 +19,8 @@ public: //Devices on Bus
 	olc2C02 ppu;
 
 	//Fake RAM 
-	std::array<uint8_t, 2048> cpuRam;
+	//std::array<uint8_t, 2048> cpuRam;
+	uint8_t cpuRam[2048];
 
 	// The Cartridge or "GamePak"
 	std::shared_ptr<Cartridge> cart;

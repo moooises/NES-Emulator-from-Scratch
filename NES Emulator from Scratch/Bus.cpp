@@ -2,12 +2,12 @@
 
 Bus::Bus()
 {
-	// Clear RAM contents, just in case 
-	for (auto& i : ram) i = 0x00;
-
 	//Connect CPU to communication BUS
 	cpu.ConnectBus(this);
-	
+
+	// Clear RAM contents, just in case 
+	//for (auto& i : cpuRam) i = 0x00;
+
 }
 
 Bus::~Bus()
@@ -27,14 +27,14 @@ void Bus::cpuWrite(uint16_t addr, uint8_t data)
 	}
 	else if (addr >= 0x2000 && addr <= 0x3FFF)
 	{
-		ppu.cpuWrite(addr & 0x0007, data)
+		ppu.cpuWrite(addr & 0x0007, data);
 	}
 }
 
 uint8_t Bus::cpuRead(uint16_t addr, bool bReadOnly)
 {
 	uint8_t data = 0x00;
-	if (cart->cpuWrite(addr, data))
+	if (cart->cpuRead(addr, data))
 	{
 		// Cartridge Address Range
 	}

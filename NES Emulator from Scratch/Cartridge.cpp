@@ -15,6 +15,8 @@ Cartridge::Cartridge(const std::string& sFileName)
 		char unused[5];
 	} header;
 
+	bImageValid = false; // From Github
+
 	std::ifstream ifs; // Input File Stream; To read/stream files
 	ifs.open(sFileName, std::ifstream::binary); // Open the file in binary mode
 	if (ifs.is_open())
@@ -26,7 +28,8 @@ Cartridge::Cartridge(const std::string& sFileName)
 			ifs.seekg(512, std::ios_base::cur); // the first 512 bytes are for traiding information, junk
 
 		// Determine Mapper ID
-		nMapperID = ((header.mapper2 >> 4) >> 4) | (header.mapper1 >> 4);
+		nMapperID = ((header.mapper2 >> 4) << 4) | (header.mapper1 >> 4);
+		mirror = (header.mapper1 & 0x01) ? VERTICAL : HORIZONTAL; // From Github
 
 		// "Discover" File Format, there are 3 types
 		uint8_t nFileType = 1;
@@ -57,6 +60,7 @@ Cartridge::Cartridge(const std::string& sFileName)
 		case 0: pMapper = std::make_shared<Mapper_000>(nPRGBanks, nCHRBanks); break; //Polymorfism to select the propper Mapper to use
 		}
 
+		bImageValid = true;
 		ifs.close();
 
 	}
@@ -66,7 +70,13 @@ Cartridge::~Cartridge()
 {
 }
 
-bool Cartridge::cpuRead(uint16_t addr, uint8_t& data)
+
+bool Cartridge::ImageValid() // From Github
+{
+	return bImageValid;
+}
+
+bool Cartridge::cpuRead(uint16_t addr, uint8_t &data)
 {
 	uint32_t mapped_addr = 0;
 	if (pMapper->cpuMapRead(addr, mapped_addr)) // It only happens if the information comes from the cartridge
@@ -90,7 +100,7 @@ bool Cartridge::cpuWrite(uint16_t addr, uint8_t data)
 		return false;
 }
 
-bool Cartridge::ppuRead(uint16_t addr, uint8_t& data)
+bool Cartridge::ppuRead(uint16_t addr, uint8_t &data)
 {
 	uint32_t mapped_addr = 0;
 	if (pMapper->ppuMapRead(addr, mapped_addr)) // It only happens if the information comes from the cartridge
