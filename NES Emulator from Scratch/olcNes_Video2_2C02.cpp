@@ -148,7 +148,7 @@ private:
 	bool OnUserCreate()
 	{
 		// Load the cartridge
-		cart = std::make_shared<Cartridge>("nestest.nes");
+		cart = std::make_shared<Cartridge>("C:/Users/mo_oi/source/repos/NES Emulator from Scratch/NES Emulator from Scratch/nestest.nes");
 		if (!cart->ImageValid())
 			return false;
 

@@ -3,6 +3,7 @@
 #include<vector>
 #include<fstream>
 #include<string>
+#include<iostream>
 
 #include "Mapper_000.h"
 

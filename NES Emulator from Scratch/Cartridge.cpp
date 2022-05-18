@@ -48,6 +48,7 @@ Cartridge::Cartridge(const std::string& sFileName)
 			nCHRBanks = header.chr_rom_chunks;
 			vCHRMemory.resize(nCHRBanks * 8192);
 			ifs.read((char*)vCHRMemory.data(), vCHRMemory.size());
+			
 		}
 		else if (nFileType == 2)
 		{
@@ -55,9 +56,11 @@ Cartridge::Cartridge(const std::string& sFileName)
 		}
 
 		// Load appropiate Mapper
+		//nMapperID = 0;
+		//std::cout << nMapperID << std::endl;
 		switch (nMapperID)
 		{
-		case 0: pMapper = std::make_shared<Mapper_000>(nPRGBanks, nCHRBanks); break; //Polymorfism to select the propper Mapper to use
+		case 0: pMapper = std::make_shared<Mapper_000>(nPRGBanks, nCHRBanks); std::cout<< "pMapper 0"<<std::endl; break; //Polymorfism to select the propper Mapper to use
 		}
 
 		bImageValid = true;
