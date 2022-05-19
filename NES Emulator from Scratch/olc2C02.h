@@ -46,10 +46,29 @@ public:
 	// Debugging Utilities
 	olc::Sprite& GetScreen();
 	olc::Sprite& GetNameTable(uint8_t i);
-	olc::Sprite& GetPatternTable(uint8_t i);
+	olc::Sprite& GetPatternTable(uint8_t i, uint8_t palette);
 	bool frame_complete = false;
+
+public:
+	olc::Pixel& GetColourFromPaletteRam(uint8_t palette, uint8_t pixel);
+
 
 private:
 	int16_t scanline = 0;
 	int16_t cycle = 0;
+
+	union
+	{
+		struct
+		{
+			uint8_t unused : 5;
+			uint8_t sprite_overflow : 1;
+			uint8_t sprite_zero_hit : 1;
+			uint8_t vertical_blank : 1;
+		};
+
+		uint8_t reg;
+	} status ;
+
+	//17:00
 };

@@ -87,9 +87,64 @@ olc::Sprite& olc2C02::GetNameTable(uint8_t i)
 	return sprNameTable[i];
 }
 
-olc::Sprite& olc2C02::GetPatternTable(uint8_t i)
+olc::Sprite& olc2C02::GetPatternTable(uint8_t i, uint8_t palette)
 {
+	for (uint16_t nTileY = 0; nTileY < 16; nTileY++)
+	{
+		for (uint16_t nTileX = 0; nTileX < 16; nTileX++)
+		{
+			// Convert the 2D tile coordinate into a 1D offset into the pattern
+			// table memory. Y*widthY +X*widthX
+			uint16_t nOffSet = nTileY * 256 + nTileX * 16; // Each tile has 16 bytes, each patter row has 16 tiles of them, 16*16 = 256 
+
+			// Each tile has 8 rows of 8 pixels
+			for (uint16_t row = 0; row < 8; row++)
+			{
+				// To read from Patter memory
+				// In the CHR ROM, each character
+				// is stored as 64 bits of lsb, followed by 64 bits of msb. This
+				// conveniently means that two corresponding rows are always 8
+				// bytes apart in memory.
+
+				uint8_t tile_lsb = ppuRead(i * 0x1000 + nOffSet + row + 0x0000); // Read the lest significant bit plane 
+				uint8_t tile_msb = ppuRead(i * 0x1000 + nOffSet + row + 0x0008); // +8 to access msb plane
+
+				for (uint16_t col = 0; col < 8; col++)
+				{
+					// We combien both byte to the get the bitmap colour
+					uint8_t pixel = (tile_lsb & 0x01) + (tile_msb & 0x01); // Only the lsb of each byte
+					tile_lsb >>= 1; tile_msb >>= 1;
+
+					// We draw that pixel value into the sprite 
+					sprPatternTable[i].SetPixel
+					(
+
+						nTileX * 8 + (7 - col),						// Because we are using the lsb of the row word first
+						nTileY * 8 + row,							// we are effectively reading the row from right
+						GetColourFromPaletteRam(palette, pixel)	// to left, so we need to draw the row "backwards"
+
+					);
+				}
+			}
+
+		}
+	}
+
 	return sprPatternTable[i];
+}
+
+olc::Pixel& olc2C02::GetColourFromPaletteRam(uint8_t palette, uint8_t pixel)
+{
+	// This is a convenience function that takes a specified palette and pixel
+	// index and returns the appropriate screen colour.
+	// "0x3F00"       - Offset into PPU addressable range where palettes are stored
+	// "palette << 2" - Each palette is 4 bytes in size
+	// "pixel"        - Each pixel index is either 0, 1, 2 or 3
+	// "& 0x3F"       - Stops us reading beyond the bounds of the palScreen array
+	return palScreen[ppuRead(0x3F00 + (palette << 2) + pixel) & 0x3F];
+
+	// Note: We dont access tblPalette directly here, instead we know that ppuRead()
+	// will map the address onto the seperate small RAM attached to the PPU bus.
 }
 
 uint8_t olc2C02::cpuRead(uint16_t addr, bool rdonly)
@@ -147,9 +202,26 @@ uint8_t olc2C02::ppuRead(uint16_t addr, bool rdonly)
 	uint8_t data = 0x00;
 	addr &= 0x3FFF;
 
-	if (cart->ppuWrite(addr, data))
+	if (cart->ppuWrite(addr, data)) 
 	{
 
+	}
+	else if (addr >= 0x0000 && addr <= 0x1FFF) // Pattern Memory Addresses
+	{
+		data = tblPattern[(addr & 0x1000) >> 12][addr & 0x0FFF]; // The table is decided by MSB of the addr and the position the Offset
+	}
+	else if (addr >= 0x2000 && addr <= 0x3EFF) // Nametable Memory Adresses
+	{
+
+	}
+	else if (addr >= 0x3F00 && addr <= 0x3FFF) // Palette Memory Adresses
+	{
+		addr &= 0x001F;
+		if (addr == 0x0010) addr = 0x0000;
+		if (addr == 0x0014) addr = 0x0004;
+		if (addr == 0x0018) addr = 0x0008;
+		if (addr == 0x001C) addr = 0x000C;
+		data = tblPalette[addr];
 	}
 
 	return data;
@@ -163,6 +235,24 @@ void olc2C02::ppuWrite(uint16_t addr, uint8_t data)
 	if (cart->ppuWrite(addr, data))
 	{
 
+	}
+	else if (addr >= 0x0000 && addr <= 0x1FFF) // Pattern Memory Addresses
+	{
+		// It is usually a ROM, but some games use it as RAM
+		tblPattern[(addr & 0x1000) >> 12][addr & 0x0FFF] = data; // The table is decided by MSB of the addr and the position the Offset
+	}
+	else if (addr >= 0x2000 && addr <= 0x3EFF) // Nametable Memory Adresses
+	{
+
+	}
+	else if (addr >= 0x3F00 && addr <= 0x3FFF) // Palette Memory Adresses
+	{
+		addr &= 0x001F;
+		if (addr == 0x0010) addr = 0x0000;
+		if (addr == 0x0014) addr = 0x0004;
+		if (addr == 0x0018) addr = 0x0008;
+		if (addr == 0x001C) addr = 0x000C;
+		data = tblPalette[addr];
 	}
 }
 
