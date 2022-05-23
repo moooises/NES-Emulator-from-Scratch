@@ -158,6 +158,9 @@ uint8_t olc2C02::cpuRead(uint16_t addr, bool rdonly)
 	case 0x0001: // Mask
 		break;
 	case 0x0002: // Status
+		data = (status.reg & 0xE0) | (ppu_data_buffer & 0x1F);
+		status.vertical_blank = 0;
+		address_latch = 0;
 		break;
 	case 0x0003: // OAM Address
 		break;
@@ -168,6 +171,11 @@ uint8_t olc2C02::cpuRead(uint16_t addr, bool rdonly)
 	case 0x0006: // PPU Address
 		break;
 	case 0x0007: // PPU Data
+		data = ppu_data_buffer;
+		ppu_data_buffer = ppuRead(ppu_address);
+
+		if (ppu_address > 0x3f00) data = ppu_data_buffer; // Just for palette adresses
+		ppu_address += (control.increment_mode ? 32 : 1);
 		break;
 	}
 
@@ -179,8 +187,10 @@ void olc2C02::cpuWrite(uint16_t addr, uint8_t data)
 	switch (addr)
 	{
 	case 0x0000: // Control
+		control.reg = data;
 		break;
 	case 0x0001: // Mask
+		mask.reg = data;
 		break;
 	case 0x0002: // Status
 		break;
@@ -191,8 +201,20 @@ void olc2C02::cpuWrite(uint16_t addr, uint8_t data)
 	case 0x0005: // Scroll
 		break;
 	case 0x0006: // PPU Address
+		if (address_latch == 0)
+		{
+			ppu_address = (ppu_address & 0x00FF) | (data << 8); // the hight 8 bits of the ppu address
+			address_latch = 1;
+		}
+		else
+		{
+			ppu_address = (ppu_address & 0xFF00) | data; // the lower 8 bits of the ppu adress
+			address_latch = 0;
+		}
 		break;
 	case 0x0007: // PPU Data
+		ppuWrite(ppu_address, data);
+		ppu_address += (control.increment_mode ? 32 : 1);
 		break;
 	}
 }
@@ -212,7 +234,30 @@ uint8_t olc2C02::ppuRead(uint16_t addr, bool rdonly)
 	}
 	else if (addr >= 0x2000 && addr <= 0x3EFF) // Nametable Memory Adresses
 	{
-
+		if (cart->mirror == Cartridge::MIRROR::VERTICAL)
+		{
+			// Vertical Nametable mode
+			if (addr >= 0x0000 && addr <= 0x03FF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0400 && addr <= 0x07FF)
+				data = tblName[1][addr & 0x03FF];
+			if (addr >= 0x0800 && addr <= 0x0BFF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0C00 && addr <= 0x0FFF)
+				data = tblName[1][addr & 0x03FF];
+		}
+		else if (cart->mirror == Cartridge::MIRROR::HORIZONTAL)
+		{
+			// Horizontal Nametable mode
+			if (addr >= 0x0000 && addr <= 0x03FF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0400 && addr <= 0x07FF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0800 && addr <= 0x0BFF)
+				data = tblName[1][addr & 0x03FF];
+			if (addr >= 0x0C00 && addr <= 0x0FFF)
+				data = tblName[1][addr & 0x03FF];
+		}
 	}
 	else if (addr >= 0x3F00 && addr <= 0x3FFF) // Palette Memory Adresses
 	{
@@ -243,7 +288,30 @@ void olc2C02::ppuWrite(uint16_t addr, uint8_t data)
 	}
 	else if (addr >= 0x2000 && addr <= 0x3EFF) // Nametable Memory Adresses
 	{
-
+		if (cart->mirror == Cartridge::MIRROR::VERTICAL)
+		{
+			// Vertical Nametable mode
+			if (addr >= 0x0000 && addr <= 0x03FF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0400 && addr <= 0x07FF)
+				data = tblName[1][addr & 0x03FF];
+			if (addr >= 0x0800 && addr <= 0x0BFF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0C00 && addr <= 0x0FFF)
+				data = tblName[1][addr & 0x03FF];
+		}
+		else if (cart->mirror == Cartridge::MIRROR::HORIZONTAL)
+		{
+			// Horizontal Nametable mode
+			if (addr >= 0x0000 && addr <= 0x03FF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0400 && addr <= 0x07FF)
+				data = tblName[0][addr & 0x03FF];
+			if (addr >= 0x0800 && addr <= 0x0BFF)
+				data = tblName[1][addr & 0x03FF];
+			if (addr >= 0x0C00 && addr <= 0x0FFF)
+				data = tblName[1][addr & 0x03FF];
+		}
 	}
 	else if (addr >= 0x3F00 && addr <= 0x3FFF) // Palette Memory Adresses
 	{
@@ -263,8 +331,21 @@ void olc2C02::ConnectCartridge(const std::shared_ptr<Cartridge>& cartridge)
 
 void olc2C02::clock()
 {
+	if (scanline == -1 && cycle == 1)
+	{
+		status.vertical_blank = 0;
+	}
+
+
+	if (scanline == 241 && cycle == 1)
+	{
+		status.vertical_blank = 1;
+		if (control.enable_nmi)
+			nmi = true;
+	}
+
 	// Fake some noise for now
-	sprScreen.SetPixel(cycle - 1, scanline, palScreen[(rand() % 2) ? 0x3F : 0x30]);
+	//sprScreen.SetPixel(cycle - 1, scanline, palScreen[(rand() % 2) ? 0x3F : 0x30]);
 
 	// Advance renderer - it never stops, it's relentless
 	cycle++;
