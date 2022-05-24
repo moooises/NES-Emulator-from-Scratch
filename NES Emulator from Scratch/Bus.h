@@ -22,6 +22,9 @@ public: //Devices on Bus
 	//std::array<uint8_t, 2048> cpuRam;
 	uint8_t cpuRam[2048];
 
+	// Controllers
+	uint8_t controller[2];
+
 	// The Cartridge or "GamePak"
 	std::shared_ptr<Cartridge> cart;
 
@@ -37,5 +40,8 @@ public: //System Interface
 private:
 	// A count of how many clocks have passed
 	uint32_t nSystemClockCounter = 0;
+	// Internal cache of controller state
+	uint8_t controller_state[2];
+
 };
 

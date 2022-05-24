@@ -151,34 +151,66 @@ uint8_t olc2C02::cpuRead(uint16_t addr, bool rdonly)
 {
 	uint8_t data = 0x00;
 
-	switch (addr)
+	if (rdonly)
 	{
-	case 0x0000: // Control
-		break;
-	case 0x0001: // Mask
-		break;
-	case 0x0002: // Status
-		data = (status.reg & 0xE0) | (ppu_data_buffer & 0x1F);
-		status.vertical_blank = 0;
-		address_latch = 0;
-		break;
-	case 0x0003: // OAM Address
-		break;
-	case 0x0004: // OAM Data
-		break;
-	case 0x0005: // Scroll
-		break;
-	case 0x0006: // PPU Address
-		break;
-	case 0x0007: // PPU Data
-		data = ppu_data_buffer;
-		ppu_data_buffer = ppuRead(ppu_address);
-
-		if (ppu_address > 0x3f00) data = ppu_data_buffer; // Just for palette adresses
-		ppu_address += (control.increment_mode ? 32 : 1);
-		break;
+		// Reading from PPU registers can affect their contents
+		// so this read only option is used for examining the
+		// state of the PPU without changing its state. This is
+		// really only used in debug mode.
+		switch (addr)
+		{
+		case 0x0000: // Control
+			data = control.reg;
+			break;
+		case 0x0001: // Mask
+			data = mask.reg;
+			break;
+		case 0x0002: // Status
+			data = status.reg;
+			break;
+		case 0x0003: // OAM Address
+			break;
+		case 0x0004: // OAM Data
+			break;
+		case 0x0005: // Scroll
+			break;
+		case 0x0006: // PPU Address
+			break;
+		case 0x0007: // PPU Data
+			break;
+		}
 	}
+	else
+	{
 
+		switch (addr)
+		{
+		case 0x0000: // Control
+			break;
+		case 0x0001: // Mask
+			break;
+		case 0x0002: // Status
+			data = (status.reg & 0xE0) | (ppu_data_buffer & 0x1F);
+			status.vertical_blank = 0;
+			address_latch = 0;
+			break;
+		case 0x0003: // OAM Address
+			break;
+		case 0x0004: // OAM Data
+			break;
+		case 0x0005: // Scroll
+			break;
+		case 0x0006: // PPU Address
+			break;
+		case 0x0007: // PPU Data
+			data = ppu_data_buffer;
+			ppu_data_buffer = ppuRead(vram_addr.reg);
+
+			if (vram_addr.reg > 0x3f00) data = ppu_data_buffer; // Just for palette adresses
+			vram_addr.reg += (control.increment_mode ? 32 : 1);
+			break;
+		}
+	}
 	return data;
 }
 
@@ -188,6 +220,8 @@ void olc2C02::cpuWrite(uint16_t addr, uint8_t data)
 	{
 	case 0x0000: // Control
 		control.reg = data;
+		tram_addr.nametable_x = control.nametable_x;
+		tram_addr.nametable_y = control.nametable_y;
 		break;
 	case 0x0001: // Mask
 		mask.reg = data;
@@ -199,22 +233,35 @@ void olc2C02::cpuWrite(uint16_t addr, uint8_t data)
 	case 0x0004: // OAM Data
 		break;
 	case 0x0005: // Scroll
-		break;
-	case 0x0006: // PPU Address
 		if (address_latch == 0)
 		{
-			ppu_address = (ppu_address & 0x00FF) | (data << 8); // the hight 8 bits of the ppu address
+			fine_x = data & 0x07;
+			tram_addr.coarse_x = data >> 3;
 			address_latch = 1;
 		}
 		else
 		{
-			ppu_address = (ppu_address & 0xFF00) | data; // the lower 8 bits of the ppu adress
+			tram_addr.fine_y = data & 0x07;
+			tram_addr.coarse_y = data >> 3;
+			address_latch = 0;
+		}
+		break;
+	case 0x0006: // PPU Address
+		if (address_latch == 0)
+		{
+			tram_addr.reg = (uint16_t)((tram_addr.reg & 0x00FF) | ((data & 0x3F) << 8)); // the hight 8 bits of the ppu address
+			address_latch = 1;
+		}
+		else
+		{
+			tram_addr.reg = (tram_addr.reg & 0xFF00) | data; // the lower 8 bits of the ppu adress
+			vram_addr = tram_addr;
 			address_latch = 0;
 		}
 		break;
 	case 0x0007: // PPU Data
-		ppuWrite(ppu_address, data);
-		ppu_address += (control.increment_mode ? 32 : 1);
+		ppuWrite(vram_addr.reg, data);
+		vram_addr.reg += (control.increment_mode ? 32 : 1);
 		break;
 	}
 }
@@ -234,6 +281,8 @@ uint8_t olc2C02::ppuRead(uint16_t addr, bool rdonly)
 	}
 	else if (addr >= 0x2000 && addr <= 0x3EFF) // Nametable Memory Adresses
 	{
+		addr &= 0x0FFF;
+
 		if (cart->mirror == Cartridge::MIRROR::VERTICAL)
 		{
 			// Vertical Nametable mode
@@ -266,7 +315,7 @@ uint8_t olc2C02::ppuRead(uint16_t addr, bool rdonly)
 		if (addr == 0x0014) addr = 0x0004;
 		if (addr == 0x0018) addr = 0x0008;
 		if (addr == 0x001C) addr = 0x000C;
-		data = tblPalette[addr];
+		data = tblPalette[addr] & (mask.grayscale ? 0x30 : 0x3F);
 	}
 
 	return data;
@@ -320,7 +369,7 @@ void olc2C02::ppuWrite(uint16_t addr, uint8_t data)
 		if (addr == 0x0014) addr = 0x0004;
 		if (addr == 0x0018) addr = 0x0008;
 		if (addr == 0x001C) addr = 0x000C;
-		data = tblPalette[addr];
+		tblPalette[addr] = data;
 	}
 }
 
@@ -329,23 +378,257 @@ void olc2C02::ConnectCartridge(const std::shared_ptr<Cartridge>& cartridge)
 	this->cart = cartridge;
 }
 
+void olc2C02::reset()
+{
+	fine_x = 0x00;
+	address_latch = 0x00;
+	ppu_data_buffer = 0x00;
+	scanline = 0;
+	cycle = 0;
+	bg_next_tile_id = 0x00;
+	bg_next_tile_attrib = 0x00;
+	bg_next_tile_lsb = 0x00;
+	bg_next_tile_msb = 0x00;
+	bg_shifter_pattern_lo = 0x0000;
+	bg_shifter_pattern_hi = 0x0000;
+	bg_shifter_attrib_lo = 0x0000;
+	bg_shifter_attrib_hi = 0x0000;
+	status.reg = 0x00;
+	mask.reg = 0x00;
+	control.reg = 0x00;
+	vram_addr.reg = 0x0000;
+	tram_addr.reg = 0x0000;
+}
+
 void olc2C02::clock()
 {
-	if (scanline == -1 && cycle == 1)
+
+	// lambda functions
+
+	auto IncrementScrollX = [&]()
 	{
-		status.vertical_blank = 0;
+		if (mask.render_background || mask.render_sprites)
+		{
+			// A name table is 32x30 tiles. 31 is part of the neighbour tile 
+			if (vram_addr.coarse_x == 31) // If we go beyond the edge of the nametable
+			{
+				vram_addr.coarse_x = 0; //  Reset the coarse_x
+				vram_addr.nametable_x = ~vram_addr.nametable_x; // And flip targe nametable bit to go to the other nametable
+			}
+			else // We increase normally, until we go beyond the edge
+			{
+				vram_addr.coarse_x++;
+			}
+		}
+	};
+
+	auto IncrementScrollY = [&]()
+	{
+		if (mask.render_background || mask.render_sprites)
+		{
+			// Scanline are one pixel height, no tiles
+			if (vram_addr.fine_y < 7)
+			{
+				vram_addr.fine_y++;
+			}
+			else // if we surpass the height of a pixel, we increment the row, taking care of vertical nametables
+			{
+				vram_addr.fine_y = 0; // Reset fine y offset
+
+				// Check if we need to swap vertical nametable targets
+				if (vram_addr.coarse_y == 29) 
+				{
+					vram_addr.coarse_y = 0;
+					vram_addr.nametable_y = ~vram_addr.nametable_y;
+				}
+				else if (vram_addr.coarse_y == 31) 
+				{
+					// If pointer is in the attribute memory, we just wrap around the current nametable
+					vram_addr.coarse_y = 0;
+				}
+				else
+				{
+					// If none of the previous conditions applied, just increase 
+					vram_addr.coarse_y++;
+				}
+			}
+		}
+
+	};
+
+	auto TransferAddressX = [&]()
+	{
+		// Only if rendering is enable
+		if (mask.render_background || mask.render_sprites)
+		{
+			vram_addr.nametable_x = tram_addr.nametable_x;
+			vram_addr.coarse_x = tram_addr.coarse_x;
+		}
+
+	};
+
+	auto TransferAddressY = [&]()
+	{
+		// Only if rendering is enable
+		if (mask.render_background || mask.render_sprites)
+		{
+			vram_addr.fine_y = tram_addr.fine_y;
+			vram_addr.nametable_y = tram_addr.nametable_y;
+			vram_addr.coarse_y = tram_addr.coarse_y;
+		}
+	};
+
+	// Prepare the shifter to rendering
+	auto LoadBackgroudShifters = [&]()
+	{
+		// we load the whole 8bit word into the botton of the 16 bit shifter
+		bg_shifter_pattern_lo = (bg_shifter_pattern_lo & 0xFF00) | bg_next_tile_lsb;
+		bg_shifter_pattern_hi = (bg_shifter_pattern_hi & 0xFF00) | bg_next_tile_msb;
+		// For the paletter, we take the indiduall binary bit and inflate them to a full 8 bit (0xFF)
+		bg_shifter_attrib_lo = (bg_shifter_attrib_lo & 0xFF00) | ((bg_next_tile_attrib & 0b01) ? 0xFF : 0x00);
+		bg_shifter_attrib_hi = (bg_shifter_attrib_hi & 0xFF00) | ((bg_next_tile_attrib & 0b10) ? 0xFF : 0x00);
+
+	};
+
+	auto UpdateShifters = [&]()
+	{
+		if (mask.render_background)
+		{
+			// Move to the right the pixels and paletes
+			bg_shifter_pattern_lo <<= 1;
+			bg_shifter_pattern_hi <<= 1;
+			bg_shifter_attrib_lo <<= 1;
+			bg_shifter_attrib_hi <<= 1;
+		}
+	};
+
+
+	if (scanline >= -1 && scanline < 240) // All visible scanlines (horizontal tv lines)
+	{
+		if (scanline == 0 && cycle == 0)
+		{
+			cycle = 1;
+		}
+
+		if (scanline == -1 && cycle == 1)
+		{
+			status.vertical_blank = 0;
+		}
+
+		if ((cycle >= 2 && cycle < 258) || (cycle >= 321 && cycle < 338)) // (vertical tvlines)
+		{
+			UpdateShifters();
+
+
+			// Look at the original source code to understands much better what each case do
+			switch ((cycle - 1) % 8) // 8 cycles per tile
+			{						 // This is used to preload the ppu with the information to render the next 8 pixels
+			case 0:
+				LoadBackgroudShifters();
+				bg_next_tile_id = ppuRead(0x2000 | (vram_addr.reg & 0x0FFF)); // First read the tile id
+				break;
+			case 2:
+				bg_next_tile_attrib = ppuRead(0x23C0 | (vram_addr.nametable_y << 11) // Then the atribute id
+													 | (vram_addr.nametable_x << 10)
+													 | ((vram_addr.coarse_y >> 2) << 3)
+													 | (vram_addr.coarse_x >> 2));
+				if (vram_addr.coarse_y & 0x02) bg_next_tile_attrib >>= 4;
+				if (vram_addr.coarse_x & 0x02) bg_next_tile_attrib >>= 2;
+				bg_next_tile_attrib &= 0x03;
+				break;
+			case 4:
+				bg_next_tile_lsb = ppuRead((control.pattern_background << 12)
+											+ ((uint16_t)bg_next_tile_id << 4)
+											+ (vram_addr.fine_y) + 0);
+				break;
+			case 6:
+				bg_next_tile_msb = ppuRead((control.pattern_background << 12)
+											+ ((uint16_t)bg_next_tile_id << 4)
+											+ (vram_addr.fine_y) + 8);
+				break;
+			case 7:
+				IncrementScrollX();
+				break;
+			}
+
+		}
+
+		if (cycle == 256) // End of the scanline
+		{
+			IncrementScrollY();
+		}
+
+
+		if (cycle == 257) // To restar our X coordante
+		{
+			LoadBackgroudShifters();
+			TransferAddressX();
+		}
+
+		// Superfluous reads of tile id at end of scanline
+		if (cycle == 338 || cycle == 340)
+		{
+			bg_next_tile_id = ppuRead(0x2000 | (vram_addr.reg & 0x0FFF));
+		}
+
+		if(scanline == -1 && cycle >= 280 && cycle < 305)
+		{
+			TransferAddressY();
+		}
+	}
+
+	if (scanline == 240)
+	{
+		// Post Render Scanline - Do Nothing
+	}
+
+	if (scanline >= 241 && scanline < 261)
+	{
+		if (scanline == 241 && cycle == 1)
+		{
+			status.vertical_blank = 1;
+			if (control.enable_nmi)
+				nmi = true;
+		}
 	}
 
 
-	if (scanline == 241 && cycle == 1)
+	// Composition - We now have background pixel information for this cycle
+	// At this point we are only interested in background
+
+	uint8_t bg_pixel = 0x00; // The 2-bit pixel to be rendered
+	uint8_t bg_palette = 0x00; // The 3-bit index of the palette the pixel indexes
+
+	// Draw background only if we can draw background in the mask register
+	if (mask.render_background)
 	{
-		status.vertical_blank = 1;
-		if (control.enable_nmi)
-			nmi = true;
+		// Handle Pixel Selection by selecting the relevant bit
+		// depending upon fine x scolling. This has the effect of
+		// offsetting ALL background rendering by a set number
+		// of pixels, permitting smooth scrolling
+		uint16_t bit_mux = 0x8000 >> fine_x;
+
+		// Select Plane pixels by extracting from the shifter 
+		// at the required location. 
+		uint8_t p0_pixel = (bg_shifter_pattern_lo & bit_mux) > 0;
+		uint8_t p1_pixel = (bg_shifter_pattern_hi & bit_mux) > 0;
+
+		// Combine to form pixel index
+		bg_pixel = (p1_pixel << 1) | p0_pixel;
+
+		// The same, but with the palette
+		uint8_t bg_pal0 = (bg_shifter_attrib_lo & bit_mux) > 0;
+		uint8_t bg_pal1 = (bg_shifter_attrib_hi & bit_mux) > 0;
+		bg_palette = (bg_pal1 << 1) | bg_pal0;
+
 	}
+
+
 
 	// Fake some noise for now
 	//sprScreen.SetPixel(cycle - 1, scanline, palScreen[(rand() % 2) ? 0x3F : 0x30]);
+
+	sprScreen.SetPixel(cycle - 1, scanline, GetColourFromPaletteRam(bg_palette, bg_pixel));
 
 	// Advance renderer - it never stops, it's relentless
 	cycle++;

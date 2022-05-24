@@ -14,7 +14,8 @@ public:
 	~Cartridge();
 
 
-public: // From Github
+public:
+	// From Github
 	bool ImageValid();
 
 	enum MIRROR
